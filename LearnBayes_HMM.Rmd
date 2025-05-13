@@ -1,0 +1,327 @@
+---
+title: "Learning Through Failing Simulations"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.height = 4, fig.width = 8, message = FALSE)
+#install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
+#library(rstan)
+library(cmdstanr)
+library(bayesplot)
+library(posterior)
+library(tidyverse)
+```
+
+## Simulating data from a 3-state HMMs
+
+```{r}
+## Simulate data from a 3-state HMM 
+N<- 3
+
+mu <- c(0, 2, 5)
+sigma <- c(0.3, 1, 2)
+
+tpm <- matrix(c(0.8, 0.1, 0.1, 
+                0.2, 0.7, 0.1, 
+                0.05, 0.3, 0.65), nrow=N, byrow=T)
+
+init <- c(1/3, 1/3, 1/3)
+
+states <- numeric(2000)
+obs <- numeric(2000)
+
+states[1] <- sample(x = 1:N, size = 1, prob = init)
+for(s in 2:2000)
+states[s] <- sample(x = 1:N, size = 1, prob=tpm[states[s-1],])
+
+for(s in 1:2000){
+  obs[s] <- rnorm(n=1, mu[states[s]], sigma[states[s]])
+}
+```
+
+Simulating replicates
+
+```{r, echo=FALSE}
+
+set.seed(6)
+
+## Simulate data from a 3-state HMM 
+Nrep <- 20
+sample_size <- 500
+
+N <- 3
+mu <- c(0, 2, 5)
+sigma <- c(0.3, 1, 2)
+
+tpm <- matrix(c(0.8, 0.1, 0.1, 
+                0.2, 0.7, 0.1, 
+                0.05, 0.3, 0.65), nrow=N, byrow=T)
+
+init <- c(1/3, 1/3, 1/3)
+
+sim.data <- tibble(states = rep(NA, Nrep*sample_size), 
+                   obs = rep(NA, Nrep*sample_size), 
+                   group = rep(1:Nrep, each = sample_size))
+
+for(r in 1:Nrep){
+  sim.data$states[1 + sample_size*(r-1)] <- sample(x = 1:N, size = 1, prob = init)
+}
+
+for(r in 1:Nrep){
+  for(s in 2:sample_size){
+    ind.rs <- s + sample_size*(r-1)
+    sim.data$states[ind.rs] <- sample(x = 1:N, 
+                        size = 1, 
+                        prob=tpm[sim.data$states[ind.rs-1],])
+  }
+}
+
+sim.data$obs <- rnorm(n=Nrep*sample_size, mu[sim.data$states], sigma[sim.data$states])
+
+```
+
+```{r}
+singlets.truth3state.fit2state <- list()
+
+for(j in 1:20){
+stan.data <- list(y = sim.data$obs[sim.data$group==j], 
+                   N = 2, 
+                   T = sample_size)
+
+modsts <- cmdstan_model("hmmNormal_v2.stan")
+singlets.truth3state.fit2state[[j]] <- modsts$sample(
+  data = stan.data, parallel_chains = 3)
+}
+
+```
+
+```{r}
+
+mcmc_hist(singlets.truth3state.fit2state[[1]]$draws( c("lp__")))
+
+```
+
+```{r}
+singlets.truth3state.fit3state <- list()
+
+for(j in 1:20){
+stan.data <- list(y = sim.data$obs[sim.data$group==j], 
+                   N = 3, 
+                   T = sample_size)
+
+modsts <- cmdstan_model("hmmNormal_v2.stan")
+singlets.truth3state.fit3state[[j]] <- modsts$sample(
+  data = stan.data, chains = 3, parallel_chains = 3)
+}
+
+```
+
+## Upping to 2000 observations
+
+```{r, echo=FALSE}
+
+set.seed(6)
+
+## Simulate data from a 3-state HMM 
+Nrep <- 20
+sample_size <- 2000
+
+N <- 3
+mu <- c(0, 2, 5)
+sigma <- c(0.3, 1, 2)
+
+tpm <- matrix(c(0.8, 0.1, 0.1, 
+                0.2, 0.7, 0.1, 
+                0.05, 0.3, 0.65), nrow=N, byrow=T)
+
+init <- c(1/3, 1/3, 1/3)
+
+sim.data <- tibble(states = rep(NA, Nrep*sample_size), 
+                   obs = rep(NA, Nrep*sample_size), 
+                   group = rep(1:Nrep, each = sample_size))
+
+for(r in 1:Nrep){
+  sim.data$states[1 + sample_size*(r-1)] <- sample(x = 1:N, size = 1, prob = init)
+}
+
+for(r in 1:Nrep){
+  for(s in 2:sample_size){
+    ind.rs <- s + sample_size*(r-1)
+    sim.data$states[ind.rs] <- sample(x = 1:N, 
+                        size = 1, 
+                        prob=tpm[sim.data$states[ind.rs-1],])
+  }
+}
+
+sim.data$obs <- rnorm(n=Nrep*sample_size, mu[sim.data$states], sigma[sim.data$states])
+
+```
+
+```{r}
+singlets.truth3state.fit3state.2000 <- list()
+
+for(j in 1:20){
+stan.data <- list(y = sim.data$obs[sim.data$group==j], 
+                   N = 3, 
+                   T = sample_size)
+
+modsts <- cmdstan_model("hmmNormal_v2.stan")
+singlets.truth3state.fit3state.2000[[j]] <- modsts$sample(
+  data = stan.data, chains = 3, parallel_chains = 3)
+}
+
+```
+
+```{r}
+singlets.truth3state.fit2state.2000 <- list()
+
+for(j in 1:20){
+stan.data <- list(y = sim.data$obs[sim.data$group==j], 
+                   N = 2, 
+                   T = sample_size)
+
+modsts <- cmdstan_model("hmmNormal_v2.stan")
+singlets.truth3state.fit2state.2000[[j]] <- modsts$sample(
+  data = stan.data, chains = 10, parallel_chains = 3)
+}
+
+```
+
+
+```{r}
+
+p1 <- mcmc_hist(singlets.truth3state.fit2state[[1]]$draws(c("lp__"))) + ggtitle("Simulation 1") + 
+  xlab("Log Posterior")
+
+p4 <- mcmc_hist(singlets.truth3state.fit2state[[4]]$draws(c("lp__"))) + ggtitle("Simulation 4") + 
+  xlab("Log Posterior")
+
+p8 <- mcmc_hist(singlets.truth3state.fit2state[[8]]$draws(c("lp__"))) + ggtitle("Simulation 8") + 
+  xlab("Log Posterior")
+
+p12 <- mcmc_hist(singlets.truth3state.fit2state[[12]]$draws(c("lp__"))) + ggtitle("Simulation 12") + 
+  xlab("Log Posterior")
+
+p16 <- mcmc_hist(singlets.truth3state.fit2state[[16]]$draws(c("lp__"))) + ggtitle("Simulation 16") + 
+  xlab("Log Posterior")
+
+p20 <- mcmc_hist(singlets.truth3state.fit2state[[20]]$draws(c("lp__"))) + ggtitle("Simulation 20") + 
+  xlab("Log Posterior")
+
+(p1 + p4 + p8)/(p12 + p16 + p20)
+
+mcmc_trace(singlets.truth3state.fit2state[[8]]$draws(c("lp__"))) / mcmc_trace(singlets.truth3state.fit2state[[20]]$draws(c("lp__")))
+
+```
+
+```{r}
+
+p1mu2 <- mcmc_hist(singlets.truth3state.fit2state[[1]]$draws(c("mu[2]"))) + ggtitle("Simulation 1") + 
+  xlab("mu[2]")
+
+p4mu2 <- mcmc_hist(singlets.truth3state.fit2state[[4]]$draws(c("mu[2]"))) + ggtitle("Simulation 4") + 
+  xlab("mu[2]")
+
+p8mu2 <- mcmc_hist(singlets.truth3state.fit2state[[8]]$draws(c("mu[2]"))) + ggtitle("Simulation 8") + 
+  xlab("mu[2]")
+
+p12mu2 <- mcmc_hist(singlets.truth3state.fit2state[[12]]$draws(c("mu[2]"))) + ggtitle("Simulation 12") + 
+  xlab("mu[2]")
+
+p16mu2 <- mcmc_hist(singlets.truth3state.fit2state[[16]]$draws(c("mu[2]"))) + ggtitle("Simulation 16") + 
+  xlab("mu[2]")
+
+p20mu2 <- mcmc_hist(singlets.truth3state.fit2state[[20]]$draws(c("mu[2]"))) + ggtitle("Simulation 20") + 
+  xlab("mu[2]")
+
+(p1mu2 + p4mu2 + p8mu2)/(p12mu2 + p16mu2 + p20mu2)
+
+```
+
+
+### 3-state HMM plots
+
+```{r}
+
+p1.3s <- mcmc_hist(singlets.truth3state.fit3state[[1]]$draws(c("lp__"))) + ggtitle("Simulation 1") + 
+  xlab("Log Posterior")
+
+p4.3s <- mcmc_hist(singlets.truth3state.fit3state[[4]]$draws(c("lp__"))) + ggtitle("Simulation 4") + 
+  xlab("Log Posterior")
+
+p8.3s <- mcmc_hist(singlets.truth3state.fit3state[[8]]$draws(c("lp__"))) + ggtitle("Simulation 8") + 
+  xlab("Log Posterior")
+
+p12.3s <- mcmc_hist(singlets.truth3state.fit3state[[12]]$draws(c("lp__"))) + ggtitle("Simulation 12") + 
+  xlab("Log Posterior")
+
+p16.3s <- mcmc_hist(singlets.truth3state.fit3state[[16]]$draws(c("lp__"))) + ggtitle("Simulation 16") + 
+  xlab("Log Posterior")
+
+p20.3s <- mcmc_hist(singlets.truth3state.fit3state[[20]]$draws(c("lp__"))) + ggtitle("Simulation 20") + 
+  xlab("Log Posterior")
+
+(p1.3s + p4.3s + p8.3s)/(p12.3s + p16.3s + p20.3s)
+
+mcmc_trace(singlets.truth3state.fit2state[[8]]$draws(c("lp__"))) / mcmc_trace(singlets.truth3state.fit2state[[20]]$draws(c("lp__")))
+
+```
+
+```{r}
+
+p1.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[1]]$draws(c("lp__"))) + ggtitle("Simulation 1") + 
+  xlab("Log Posterior")
+
+p4.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[4]]$draws(c("lp__"))) + ggtitle("Simulation 4") + 
+  xlab("Log Posterior")
+
+p8.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[8]]$draws(c("lp__"))) + ggtitle("Simulation 8") + 
+  xlab("Log Posterior")
+
+p12.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[12]]$draws(c("lp__"))) + ggtitle("Simulation 12") + 
+  xlab("Log Posterior")
+
+p16.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[16]]$draws(c("lp__"))) + ggtitle("Simulation 16") + 
+  xlab("Log Posterior")
+
+p20.3s2000 <- mcmc_hist(singlets.truth3state.fit3state.2000[[20]]$draws(c("lp__"))) + ggtitle("Simulation 20") + 
+  xlab("Log Posterior")
+
+(p1.3s2000 + p4.3s2000 + p8.3s2000)/(p12.3s2000 + p16.3s2000 + p20.3s2000)
+
+mcmc_trace(singlets.truth3state.fit2state[[8]]$draws(c("lp__"))) / mcmc_trace(singlets.truth3state.fit2state[[20]]$draws(c("lp__")))
+
+```
+
+
+```{r}
+
+mcmc_trace(singlets.truth3state.fit2state.2000[[8]]$draws(c("lp__"))) / mcmc_trace(singlets.truth3state.fit2state.2000[[20]]$draws(c("lp__")))
+
+
+```
+
+```{r}
+
+p1mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[1]]$draws(c("mu[2]"))) + ggtitle("Simulation 1") + 
+  xlab("mu[2]")
+
+p4mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[4]]$draws(c("mu[2]"))) + ggtitle("Simulation 4") + 
+  xlab("mu[2]")
+
+p8mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[8]]$draws(c("mu[2]"))) + ggtitle("Simulation 8") + 
+  xlab("mu[2]")
+
+p12mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[12]]$draws(c("mu[2]"))) + ggtitle("Simulation 12") + 
+  xlab("mu[2]")
+
+p16mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[16]]$draws(c("mu[2]"))) + ggtitle("Simulation 16") + 
+  xlab("mu[2]")
+
+p20mu2 <- mcmc_hist(singlets.truth3state.fit2state.2000[[20]]$draws(c("mu[2]"))) + ggtitle("Simulation 20") + 
+  xlab("mu[2]")
+
+(p1mu2 + p4mu2 + p8mu2)/(p12mu2 + p16mu2 + p20mu2)
+
+```
