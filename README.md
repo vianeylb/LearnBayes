@@ -1,1 +1,1 @@
-# LearnBayes
+# Learn Bayes Week
